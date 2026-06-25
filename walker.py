@@ -1,39 +1,90 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.animation as animation
 
-rng = np.random.default_rng(42)
-
-
-def random_walk(num_steps, max_step=0.05):
-    """Return a 3D random walk as (num_steps, 3) array"""
-    start_pos = rng.random(3)
-    steps = rng.uniform(-max_step, max_step, size=(num_steps, 3))
-    walk = start_pos + np.cumsum(steps, axis=0)
-    return walk
+from matplotlib.animation import FuncAnimation
+from scipy.integrate import odeint
 
 
-def update_lines(num, walks, lines):
-    for line, walk in zip(lines, walks):
-        line.set_data_3d(walk[:num, :].T)
-    return lines
+
+# Lorenz system parameters
+SIGMA = 10.
+RHO = 28.
+BETA = 8. / 3.
 
 
-num_steps = 30
-walks = [random_walk(num_steps) for index in range(40)]
+def lorenz(state, t, sigma=SIGMA, rho=RHO, beta=BETA):
+    x, y, z = state
+    dx = sigma * (y - x)
+    dy = x * (rho - z) - y
+    dz = x * y - beta * z
+    return [dx, dy, dz]
 
-fig = plt.figure()
-ax = fig.add_subplot(projection="3d")
 
-lines = [ax.plot([], [], [])[0] for _ in walks]
+# Integrate system over time
+dt = 0.01
+n_steps = 10000
+t = np.arange(0, n_steps * dt, dt)
 
-ax.set(xlim3d=(0, 1), xlabel="X")
-ax.set(ylim3d=(0, 1), ylabel="Y")
-ax.set(zlim3d=(0, 1), zlabel="Z")
+state_0 = [1.0, 1.0, 1.0]
 
-ani = animation.FuncAnimation(
-    fig, update_lines, num_steps, fargs=(walks, lines), interval=100
+trajectory = odeint(lorenz, state_0, t)
+x, y, z = trajectory[:, 0], trajectory[:, 1], trajectory[:, 2]
+
+# Plot
+fig = plt.figure(figsize=(9, 7), facecolor='black')
+ax = fig.add_subplot(111, projection='3d', facecolor='black')
+ax.set_axis_off()
+ax.set_xlim(x.min(), x.max())
+ax.set_ylim(y.min(), y.max())
+ax.set_zlim(z.min(), z.max())
+ax.set_title('Lorenz Attractor', color='white', fontsize=14)
+
+# Line that traces the full path so far, and a "head" marker
+line, = ax.plot([], [], [], lw=0.8, color='cyan')
+head, = ax.plot([], [], [], 'o', color='white', markersize=4)
+
+# Slowly rotate the camera
+def init():
+    line.set_data([], [])
+    line.set_3d_properties([])
+    head.set_data([], [])
+    head.set_3d_properties([])
+    return line, head
+
+
+# Number of points to draw per frame (speeds up the animation)
+step = 5
+n_frames = n_steps // step
+
+
+def update(frame):
+    idx = frame * step
+    line.set_data(x[:idx], y[:idx])
+    line.set_3d_properties(z[:idx])
+    
+    if idx > 0:
+        head.set_data(
+            [x[idx - 1]],
+            [y[idx - 1]]
+        )
+        head.set_3d_properties([z[idx - 1]])
+
+    # Rotate the view slowly
+    ax.view_init(elev=25, azim=0.3 * frame)
+    return line, head
+
+
+ani = FuncAnimation(
+    fig,
+    update,
+    frames=n_frames,
+    init_func=init,
+    interval=20,
+    blit=False
 )
 
+# To display interact, uncomment:
 plt.show()
 
+# To save as GIF (pillow) or MP4 (ffmpeg), uncomment:
+# ani.save("lorenz_attractor.gif", writer='pillow', fps=30, dpi=150)
